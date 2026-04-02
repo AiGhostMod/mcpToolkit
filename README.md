@@ -160,6 +160,10 @@ Useful local URLs:
 - Dashboard: `http://127.0.0.1:${PORT:-8080}/dashboard`
 - Health: `http://127.0.0.1:${PORT:-8080}/healthz`
 
+If you are wiring this into an agent or MCP client locally, use:
+
+- **MCP URL:** `http://127.0.0.1:${PORT:-8080}/mcp`
+
 ## Quick start - Docker Compose
 
 ```bash
@@ -190,6 +194,9 @@ All Azure paths in this repo target **Azure Container Apps**. The Terraform and 
 
 If the image is not already present in ACR, use the bootstrap switch (`deploy_container_app` or `deployContainerApp`) so you can create the infrastructure first, push the image, and then create the Container App cleanly.
 
+> [!TIP]
+> If you build locally on Apple Silicon or any non-`linux/amd64` host, use `docker buildx build --platform linux/amd64 --push ...` for Azure Container Apps compatibility. The live validation for this repo used that path.
+
 ### Option 1 - Azure CLI quick deploy from source
 
 This is the fastest path if you want a working Container App and do not need ACR-backed infrastructure as code.
@@ -209,6 +216,10 @@ cp .env.example .env
 ```
 
 This path uses the variables in `.env` and builds from the current repo source.
+
+After deployment, the MCP URL to give an agent or MCP client is:
+
+- **MCP URL:** `https://<container-app-fqdn>/mcp`
 
 ### Option 2 - Terraform deployment
 
@@ -248,13 +259,16 @@ This path uses the variables in `.env` and builds from the current repo source.
 
 4. Build and push the image into ACR.
 
+   The most reliable local path is `docker buildx`, which also handles the `linux/amd64` requirement cleanly:
+
    ```bash
    ACR_NAME="$(terraform output -raw acr_name)"
-   IMAGE_REF="$(terraform output -raw image_reference)"
 
-   az acr build \
-     --registry "$ACR_NAME" \
-     --image "${IMAGE_REF#*/}" \
+   az acr login --name "$ACR_NAME"
+   docker buildx build \
+     --platform linux/amd64 \
+     -t "$(terraform output -raw image_reference)" \
+     --push \
      ..
    ```
 
@@ -266,13 +280,18 @@ This path uses the variables in `.env` and builds from the current repo source.
    terraform apply
    ```
 
-6. Get the app URL and smoke test it.
+6. Get the app URL, MCP URL, and smoke test it.
 
    ```bash
    APP_URL="$(terraform output -raw container_app_url)"
+   MCP_URL="${APP_URL}/mcp"
    cd ..
    python3 scripts/smoke_test.py --base-url "$APP_URL"
    ```
+
+   Use this in your agent or MCP client:
+
+   - **MCP URL:** `$MCP_URL`
 
 7. Clean up.
 
@@ -311,10 +330,12 @@ This path uses the variables in `.env` and builds from the current repo source.
      --name mcp-bicep-bootstrap \
      --location swedencentral \
      --template-file bicep/main.bicep \
-     --parameters @bicep/main.bicepparam
+     --parameters bicep/main.bicepparam
    ```
 
 3. Build and push the image into ACR.
+
+   The most reliable local path is `docker buildx`, which also handles the `linux/amd64` requirement cleanly:
 
    ```bash
    ACR_NAME="$(az deployment sub show \
@@ -326,12 +347,14 @@ This path uses the variables in `.env` and builds from the current repo source.
    IMAGE_REF="$(az deployment sub show \
      --name mcp-bicep-bootstrap \
      --location swedencentral \
-     --query properties.outputs.imageReference.value \
-     --output tsv)"
+    --query properties.outputs.imageReference.value \
+    --output tsv)"
 
-   az acr build \
-     --registry "$ACR_NAME" \
-     --image "${IMAGE_REF#*/}" \
+   az acr login --name "$ACR_NAME"
+   docker buildx build \
+     --platform linux/amd64 \
+     -t "$IMAGE_REF" \
+     --push \
      .
    ```
 
@@ -344,11 +367,11 @@ This path uses the variables in `.env` and builds from the current repo source.
      --name mcp-bicep-app \
      --location swedencentral \
      --template-file bicep/main.bicep \
-     --parameters @bicep/main.bicepparam \
+     --parameters bicep/main.bicepparam \
      --parameters deployContainerApp=true
    ```
 
-5. Get the app URL and smoke test it.
+5. Get the app URL, MCP URL, and smoke test it.
 
    ```bash
    RESOURCE_GROUP_NAME="$(az deployment sub show \
@@ -369,14 +392,139 @@ This path uses the variables in `.env` and builds from the current repo source.
      --query properties.configuration.ingress.fqdn \
      --output tsv)"
 
+   MCP_URL="https://$APP_FQDN/mcp"
    python3 scripts/smoke_test.py --base-url "https://$APP_FQDN"
    ```
+
+   Use this in your agent or MCP client:
+
+   - **MCP URL:** `$MCP_URL`
 
 6. Clean up.
 
    ```bash
    az group delete --name "$RESOURCE_GROUP_NAME" --yes
    ```
+
+### Option 4 - Use an existing container registry and/or existing ACA environment
+
+The Terraform and Bicep assets in this repo are written to create a fresh ACR and a fresh Container Apps environment. If you already have one or both of those resources, the fastest path is to reuse them with Azure CLI.
+
+#### Existing ACR only
+
+If you already have an ACR and just want to push this image into it:
+
+```bash
+EXISTING_ACR_NAME="<your-acr-name>"
+IMAGE_REPO="simple-mcp-server"
+IMAGE_TAG="latest"
+
+az acr login --name "$EXISTING_ACR_NAME"
+docker buildx build \
+  --platform linux/amd64 \
+  -t "${EXISTING_ACR_NAME}.azurecr.io/${IMAGE_REPO}:${IMAGE_TAG}" \
+  --push \
+  /path/to/MCP-Toolbox
+```
+
+#### Existing ACA environment only
+
+If you already have a Container Apps environment and an image in some accessible registry, create the app directly:
+
+```bash
+RESOURCE_GROUP_NAME="<existing-resource-group>"
+CONTAINERAPPS_ENVIRONMENT="<existing-aca-environment>"
+CONTAINER_APP_NAME="mcp-toolbox"
+IMAGE_REF="<registry>/<repository>:<tag>"
+
+az containerapp create \
+  --resource-group "$RESOURCE_GROUP_NAME" \
+  --environment "$CONTAINERAPPS_ENVIRONMENT" \
+  --name "$CONTAINER_APP_NAME" \
+  --image "$IMAGE_REF" \
+  --target-port 8080 \
+  --ingress external \
+  --env-vars PORT=8080 MCP_HISTORY_SIZE=10 MCP_DASHBOARD_ENABLED=true
+```
+
+#### Existing ACR and existing ACA environment
+
+If you already have both, the remaining steps are:
+
+1. Push the image into your ACR.
+2. Ensure the Container App can pull from that ACR. The clean approach is a user-assigned identity with `AcrPull`.
+3. Create the Container App with that identity.
+
+Example:
+
+```bash
+RESOURCE_GROUP_NAME="<existing-resource-group>"
+CONTAINERAPPS_ENVIRONMENT="<existing-aca-environment>"
+CONTAINER_APP_NAME="mcp-toolbox"
+ACR_NAME="<existing-acr-name>"
+IMAGE_REPO="simple-mcp-server"
+IMAGE_TAG="latest"
+IDENTITY_NAME="mcp-toolbox-pull"
+
+az identity create \
+  --resource-group "$RESOURCE_GROUP_NAME" \
+  --name "$IDENTITY_NAME"
+
+IDENTITY_ID="$(az identity show \
+  --resource-group "$RESOURCE_GROUP_NAME" \
+  --name "$IDENTITY_NAME" \
+  --query id --output tsv)"
+
+IDENTITY_PRINCIPAL_ID="$(az identity show \
+  --resource-group "$RESOURCE_GROUP_NAME" \
+  --name "$IDENTITY_NAME" \
+  --query principalId --output tsv)"
+
+ACR_ID="$(az acr show --name "$ACR_NAME" --query id --output tsv)"
+
+az role assignment create \
+  --assignee-object-id "$IDENTITY_PRINCIPAL_ID" \
+  --assignee-principal-type ServicePrincipal \
+  --role AcrPull \
+  --scope "$ACR_ID"
+
+az acr login --name "$ACR_NAME"
+docker buildx build \
+  --platform linux/amd64 \
+  -t "${ACR_NAME}.azurecr.io/${IMAGE_REPO}:${IMAGE_TAG}" \
+  --push \
+  /path/to/MCP-Toolbox
+
+az containerapp create \
+  --resource-group "$RESOURCE_GROUP_NAME" \
+  --environment "$CONTAINERAPPS_ENVIRONMENT" \
+  --name "$CONTAINER_APP_NAME" \
+  --image "${ACR_NAME}.azurecr.io/${IMAGE_REPO}:${IMAGE_TAG}" \
+  --target-port 8080 \
+  --ingress external \
+  --user-assigned "$IDENTITY_ID" \
+  --registry-server "${ACR_NAME}.azurecr.io" \
+  --registry-identity "$IDENTITY_ID" \
+  --env-vars PORT=8080 MCP_HISTORY_SIZE=10 MCP_DASHBOARD_ENABLED=true
+```
+
+The MCP URL for an agent/client is:
+
+- **MCP URL:** `https://<container-app-fqdn>/mcp`
+
+## Cleanup
+
+Use the cleanup path that matches how you ran MCP Toolbox:
+
+| Scenario | Cleanup |
+| --- | --- |
+| Local Python | Stop the process and remove `.venv` or `.env` if you no longer need them. |
+| Docker Compose | `docker compose down` |
+| Azure CLI quick deploy (`deploy_aca.sh`) | `az group delete --name "$RESOURCE_GROUP" --yes` |
+| Terraform deployment | `cd terraform && terraform destroy` |
+| Bicep deployment | `az group delete --name "$RESOURCE_GROUP_NAME" --yes` |
+| Existing shared ACA environment | `az containerapp delete --resource-group "$RESOURCE_GROUP_NAME" --name "$CONTAINER_APP_NAME" --yes` |
+| Existing shared ACR + ACA | Delete only the Container App and optional pull identity if those were created just for this tool; avoid deleting shared registries or shared ACA environments unless they were dedicated to MCP Toolbox. |
 
 ## Operational notes
 
