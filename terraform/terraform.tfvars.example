@@ -1,0 +1,38 @@
+# Azure location for all resources.
+location = "swedencentral"
+
+# Used when you want one knob to influence the generated default names.
+name_prefix = "simple-mcp-server"
+
+# Override any generated names if you want fully explicit resource naming.
+resource_group_name             = "rg-simple-mcp-server"
+log_analytics_workspace_name   = "simple-mcp-server-law"
+container_apps_environment_name = "simple-mcp-server-env"
+container_app_name             = "simple-mcp-server"
+user_assigned_identity_name    = "simple-mcp-server-pull"
+
+# Azure Container Registry names must be globally unique, 5-50 chars, and alphanumeric only.
+acr_name = "simplemcpserver12345"
+
+# Leave this false for the first apply if the image has not been pushed to ACR yet.
+deploy_container_app = false
+
+image_repository = "simple-mcp-server"
+image_tag        = "1.1.0"
+
+ingress_external = true
+target_port      = 8080
+container_registry_sku = "Basic"
+
+min_replicas = 1
+max_replicas = 2
+
+container_app_environment_variables = {
+  MCP_HISTORY_SIZE      = "10"
+  MCP_DASHBOARD_ENABLED = "true"
+}
+
+tags = {
+  environment = "dev"
+  project     = "mcpStandalone"
+}

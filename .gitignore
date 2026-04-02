@@ -1,0 +1,15 @@
+.DS_Store
+.env
+.venv/
+__pycache__/
+scripts/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/crash.log
+
+bicep/*.json
