@@ -143,7 +143,32 @@ APP_FQDN="$(az containerapp show \
   --query properties.configuration.ingress.fqdn \
   --output tsv)"
 
-python3 "${PROJECT_DIR}/scripts/smoke_test.py" --base-url "https://${APP_FQDN}"
+SMOKE_ATTEMPTS="${SMOKE_ATTEMPTS:-8}"
+SMOKE_DELAY_SECONDS="${SMOKE_DELAY_SECONDS:-10}"
+smoke_ok=false
+
+for ((attempt=1; attempt<=SMOKE_ATTEMPTS; attempt++)); do
+  if python3 "${PROJECT_DIR}/scripts/smoke_test.py" --base-url "https://${APP_FQDN}"; then
+    smoke_ok=true
+    break
+  fi
+
+  if [[ "${attempt}" -lt "${SMOKE_ATTEMPTS}" ]]; then
+    echo "Smoke test attempt ${attempt}/${SMOKE_ATTEMPTS} failed; retrying in ${SMOKE_DELAY_SECONDS}s..."
+    sleep "${SMOKE_DELAY_SECONDS}"
+  fi
+done
+
+if [[ "${smoke_ok}" != "true" ]]; then
+  echo "Smoke test failed after ${SMOKE_ATTEMPTS} attempts." >&2
+  echo "Fetching recent Container App logs for diagnostics..." >&2
+  az containerapp logs show \
+    --resource-group "${RESOURCE_GROUP}" \
+    --name "${APP_NAME}" \
+    --tail 200 \
+    2>/dev/null || true
+  exit 1
+fi
 
 echo
 echo "Deployment complete."

@@ -9,7 +9,12 @@ Looking for the shorter getting-started version? See [README.md](./README.md).
 
 ## Project layout
 
-- `server.py` - the FastAPI-based MCP server
+- `server.py` - compatibility entrypoint shim (`python server.py` still works)
+- `mcp_toolbox/app.py` - FastAPI app assembly and MCP JSON-RPC handling
+- `mcp_toolbox/config.py` - constants and input coercion helpers
+- `mcp_toolbox/diagnostics/` - request snapshots, call history, and dashboard rendering
+- `mcp_toolbox/tools/` - tool catalog plus handler registry and per-domain handler modules
+- `mcp_toolbox/routes/` - route registration modules (`health`, `diagnostics`, and `mcp`)
 - `requirements.txt` - Python dependencies
 - `Dockerfile` / `.dockerignore` - container build files
 - `compose.yaml` - local Docker Compose run
@@ -92,6 +97,8 @@ The default posture is **MCP + health with compatibility routing enabled**: `/mc
 | `ACR_NAME` | `deploy_bicep.sh` | Optional explicit Azure Container Registry name. If blank, the script derives one from the app settings. |
 | `IMAGE_REPOSITORY` | `deploy_bicep.sh` | Container repository name to publish and deploy. |
 | `IMAGE_TAG` | `deploy_bicep.sh` | Container image tag to publish and deploy. |
+| `SMOKE_ATTEMPTS` | `deploy_bicep.sh` | Number of post-deploy smoke test retries before failing. |
+| `SMOKE_DELAY_SECONDS` | `deploy_bicep.sh` | Delay between smoke test retries. |
 | `INGRESS` | `deploy_aca.sh` | Container App ingress mode, typically `external`. |
 
 ### Terraform knobs

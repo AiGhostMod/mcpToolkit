@@ -13,6 +13,7 @@ RUN apt-get update \
     && pip install --no-cache-dir -r requirements.txt
 
 COPY server.py .
+COPY mcp_toolbox ./mcp_toolbox
 
 ENV PORT=8080
 EXPOSE 8080

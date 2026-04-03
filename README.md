@@ -44,7 +44,7 @@ Deploy it to Azure with the automated Bicep flow:
 
 That script creates the Bicep-backed Azure resources, builds and pushes the container image, deploys the Container App, runs the smoke test, and prints the final MCP URL. It leaves the infrastructure running when it finishes.
 
-For the manual Bicep flow, Terraform deployment, cleanup, existing-resource reuse, extra configuration knobs, and the full operator guide, see [advancedReadme.md](./advancedReadme.md).
+For the manual Bicep flow, Terraform deployment, cleanup, existing-resource reuse, extra configuration knobs, and the full operator guide, see [README_advanced.md](./README_advanced.md).
 
 ## Available tools
 
@@ -83,7 +83,11 @@ In other words: Foundry applies the auth mode, and MCP Toolbox gives you visibil
 2. **Onboarding failure triage** — when tool setup fails (timeouts, 401/403, wrong header format), inspect the real inbound request immediately instead of guessing where the break is.
 3. **Security and policy verification** — prove that only expected auth/context data is being forwarded from Foundry before switching the agent to a real protected MCP backend.
 
-Useful official references:
+### Sample usage in Foundry
+
+<img src="media/sampleUse1.png" alt="Sample use: inspect_request_auth showing decoded JWT payload" />
+
+Useful references:
 
 - [Foundry MCP authentication options](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/mcp-authentication)
 - [Foundry MCP tool documentation](https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/tools/model-context-protocol)
