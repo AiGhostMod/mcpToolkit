@@ -2,7 +2,7 @@
 
 MCP Toolbox is a diagnostic MCP server for seeing exactly what a client or agent sends over the wire. It is useful when you need to validate MCP connectivity, inspect headers and tokens, confirm routing behavior, and test network or auth assumptions before you point an agent at a real backend.
 
-By default, the service keeps risky HTTP diagnostics off: use `/mcp` for MCP traffic and `/healthz` for probes, with dashboard endpoints opt-in. Compatibility routing is enabled so Foundry onboarding probes can still resolve discovery reliably.
+By default, the service keeps risky HTTP diagnostics off: use `/mcp` for MCP traffic and `/healthz` for probes, with dashboard endpoints opt-in.
 
 > [!WARNING]
 > **Testing/troubleshooting use only. Use at your own risk.** This service can capture request headers, cookies, auth values, bodies, environment data, and recent call history. If you point real traffic at it, you may expose real tokens, secrets, or sensitive payloads. Keep it in trusted environments and assume anything sent to it may be inspected.
