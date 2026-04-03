@@ -77,7 +77,7 @@ MCP Toolbox is intentionally best used as an **unauthenticated diagnostic endpoi
 
 In other words: Foundry applies the auth mode, and MCP Toolbox gives you visibility into the resulting request (`inspect_request_headers`, `inspect_request_auth`, `debug_request_context`).
 
-### Three high-value scenarios
+### Real-world applications
 
 1. **Auth-mode validation before production** — connect the same agent with different Foundry auth settings and confirm the exact header/token shape that reaches the MCP endpoint.
 2. **Onboarding failure triage** — when tool setup fails (timeouts, 401/403, wrong header format), inspect the real inbound request immediately instead of guessing where the break is.
