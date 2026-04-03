@@ -68,7 +68,8 @@ param maxReplicas int = 2
 @description('Additional environment variables passed into the Container App. PORT is always aligned to targetPort.')
 param containerAppEnvironmentVariables object = {
   MCP_HISTORY_SIZE: '10'
-  MCP_DASHBOARD_ENABLED: 'true'
+  MCP_DASHBOARD_ENABLED: 'false'
+  MCP_COMPAT_PATHS_ENABLED: 'true'
 }
 
 @description('Optional tags to apply to all Azure resources.')

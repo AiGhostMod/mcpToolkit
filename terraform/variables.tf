@@ -141,7 +141,8 @@ variable "container_app_environment_variables" {
   type        = map(string)
   default = {
     MCP_HISTORY_SIZE      = "10"
-    MCP_DASHBOARD_ENABLED = "true"
+    MCP_DASHBOARD_ENABLED = "false"
+    MCP_COMPAT_PATHS_ENABLED = "true"
   }
 }
 

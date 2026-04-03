@@ -113,7 +113,8 @@ _HISTORY_LIMIT = _bounded_int_from_env(
     minimum=1,
     maximum=MAX_HISTORY_SIZE,
 )
-_DASHBOARD_ENABLED = _coerce_bool(os.getenv("MCP_DASHBOARD_ENABLED"), default=True)
+_DASHBOARD_ENABLED = _coerce_bool(os.getenv("MCP_DASHBOARD_ENABLED"), default=False)
+_COMPAT_PATHS_ENABLED = _coerce_bool(os.getenv("MCP_COMPAT_PATHS_ENABLED"), default=True)
 _CALL_HISTORY: deque[dict[str, Any]] = deque(maxlen=_HISTORY_LIMIT)
 _CALL_HISTORY_LOCK = Lock()
 
@@ -402,6 +403,7 @@ def _runtime_snapshot() -> dict[str, Any]:
         "transport": MCP_TRANSPORT,
         "portEnv": os.getenv("PORT"),
         "dashboardEnabled": _DASHBOARD_ENABLED,
+        "compatPathsEnabled": _COMPAT_PATHS_ENABLED,
         "historySize": _HISTORY_LIMIT,
         "historyLength": history_length,
         "uptimeSeconds": round(time.monotonic() - _START_TIME, 3),
@@ -466,6 +468,7 @@ def _server_info() -> dict[str, Any]:
         "historySize": _HISTORY_LIMIT,
         "historyLength": len(_get_recent_calls(_HISTORY_LIMIT)),
         "dashboardEnabled": _DASHBOARD_ENABLED,
+        "compatPathsEnabled": _COMPAT_PATHS_ENABLED,
         "runtime": _runtime_snapshot(),
         "routes": {
             "count": len(app.routes),
@@ -641,6 +644,11 @@ def _build_dashboard_html() -> str:
 def _ensure_dashboard_enabled() -> None:
     if not _DASHBOARD_ENABLED:
         raise HTTPException(status_code=404, detail="Dashboard is disabled.")
+
+
+def _ensure_compat_paths_enabled() -> None:
+    if not _COMPAT_PATHS_ENABLED:
+        raise HTTPException(status_code=404, detail="Compatibility routes are disabled.")
 
 
 def _tool_get_caller_ip(
@@ -1331,6 +1339,8 @@ def api_runtime() -> dict[str, Any]:
 @app.get("/v1/mcp")
 @app.get("/v1/mcp/")
 def mcp_discovery(request: Request) -> dict[str, Any]:
+    if request.url.path == "/":
+        _ensure_compat_paths_enabled()
     started_at = time.perf_counter()
     payload = _mcp_discovery_payload()
     _record_call(
@@ -1607,18 +1617,22 @@ async def _mcp_jsonrpc(request: Request) -> JSONResponse:
 @app.post("/v1/mcp")
 @app.post("/v1/mcp/")
 async def mcp_endpoint(request: Request) -> JSONResponse:
+    if request.url.path == "/":
+        _ensure_compat_paths_enabled()
     return await _mcp_jsonrpc(request)
 
 
-# Some MCP clients normalize or rewrite endpoint paths. Accept any GET/POST path and
-# serve MCP discovery/JSON-RPC to avoid false 404s caused purely by path shape.
+# Some MCP clients normalize or rewrite endpoint paths. These optional compatibility
+# routes can serve MCP discovery/JSON-RPC to avoid false 404s caused purely by path shape.
 @app.get("/{_remaining_path:path}")
 def mcp_discovery_fallback(_remaining_path: str, request: Request) -> dict[str, Any]:
+    _ensure_compat_paths_enabled()
     return mcp_discovery(request)
 
 
 @app.post("/{_remaining_path:path}")
 async def mcp_endpoint_fallback(_remaining_path: str, request: Request) -> JSONResponse:
+    _ensure_compat_paths_enabled()
     return await _mcp_jsonrpc(request)
 
 

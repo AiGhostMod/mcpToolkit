@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import urllib.error
 import urllib.request
 from typing import Any
 
@@ -14,8 +15,11 @@ def _get_json(url: str) -> Any:
 
 
 def _get_text(url: str) -> tuple[int, str]:
-    with urllib.request.urlopen(url, timeout=20) as response:
-        return response.status, response.read().decode("utf-8")
+    try:
+        with urllib.request.urlopen(url, timeout=20) as response:
+            return response.status, response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode("utf-8")
 
 
 def _post_json(url: str, payload: dict[str, Any]) -> Any:
@@ -46,12 +50,20 @@ def _call_tool(base_url: str, name: str, arguments: dict[str, Any]) -> dict[str,
 def main() -> int:
     parser = argparse.ArgumentParser(description="Smoke test the standalone MCP server.")
     parser.add_argument("--base-url", default="http://127.0.0.1:8080")
+    parser.add_argument("--expect-dashboard-enabled", action="store_true")
     args = parser.parse_args()
 
     base_url = args.base_url.rstrip("/")
     try:
         health = _get_json(f"{base_url}/healthz")
         dashboard_status, dashboard_text = _get_text(f"{base_url}/dashboard")
+        expected_dashboard_status = 200 if args.expect_dashboard_enabled else 404
+        if dashboard_status != expected_dashboard_status:
+            raise RuntimeError(
+                f"Unexpected dashboard status {dashboard_status}; expected {expected_dashboard_status}"
+            )
+        if args.expect_dashboard_enabled and "Recent calls" not in dashboard_text:
+            raise RuntimeError("Dashboard endpoint did not render the expected page content.")
         initialize = _post_json(
             f"{base_url}/mcp",
             {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
@@ -70,6 +82,7 @@ def main() -> int:
         "ok": True,
         "healthz": health,
         "dashboardStatus": dashboard_status,
+        "dashboardEnabledExpected": args.expect_dashboard_enabled,
         "dashboardHasRecentCalls": "Recent calls" in dashboard_text,
         "serverInfo": initialize["result"]["serverInfo"],
         "toolCount": len(tool_names),

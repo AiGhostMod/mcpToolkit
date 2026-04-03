@@ -31,7 +31,8 @@ param maxReplicas = 2
 
 param containerAppEnvironmentVariables = {
   MCP_HISTORY_SIZE: '10'
-  MCP_DASHBOARD_ENABLED: 'true'
+  MCP_DASHBOARD_ENABLED: 'false'
+  MCP_COMPAT_PATHS_ENABLED: 'true'
 }
 
 param tags = {

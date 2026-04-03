@@ -1,6 +1,8 @@
-# MCP Toolbox
+# MCP Toolbox - Advanced Guide
 
 MCP Toolbox is a standalone MCP troubleshooting server for **testing, diagnostics, request inspection, network probing, and runtime introspection**. It is designed for lab, dev, and troubleshooting scenarios where you want to see exactly what an MCP client sent and how the server received it.
+
+Looking for the shorter getting-started version? See [README.md](./README.md).
 
 > [!WARNING]
 > **Testing/troubleshooting use only. Use at your own risk.** This service can capture request headers, cookies, auth values, bodies, environment data, and recent call history. If you point real traffic at it, you may expose real tokens, secrets, or sensitive payloads. Keep it in trusted environments and assume anything sent to it may be inspected.
@@ -14,6 +16,7 @@ MCP Toolbox is a standalone MCP troubleshooting server for **testing, diagnostic
 - `.env.example` - local and quick-deploy defaults
 - `scripts/smoke_test.py` - health + MCP validation script
 - `scripts/deploy_aca.sh` - quick Azure Container Apps deploy from source with `az containerapp up`
+- `scripts/deploy_bicep.sh` - automated Bicep bootstrap/build/push/deploy flow for Azure Container Apps
 - `terraform/` - Terraform deployment for Azure Container Apps + ACR
 - `bicep/` - Bicep deployment for Azure Container Apps + ACR
 
@@ -21,42 +24,38 @@ MCP Toolbox is a standalone MCP troubleshooting server for **testing, diagnostic
 
 ### HTTP endpoints
 
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /healthz` | Basic health probe with app version. |
-| `GET /dashboard` | HTML dashboard showing recent captured calls. |
-| `GET /api/calls` | Recent captured calls and telemetry. |
-| `GET /api/calls/latest` | The latest captured call. |
-| `GET /api/calls/{call_id}` | A specific captured call by ID. |
-| `GET /api/runtime` | Runtime, version, uptime, route, and server metadata. |
-| `GET /mcp` | MCP discovery endpoint. |
-| `POST /mcp` | MCP JSON-RPC endpoint. |
-| `GET/POST /mcp/mcp`, `GET/POST /v1/mcp`, catch-all GET/POST fallback | Path-tolerant aliases for clients that vary request paths. |
+| Endpoint | Availability | Purpose |
+| --- | --- | --- |
+| `GET /healthz` | Always on | Basic health probe with app version. |
+| `GET /mcp`, `POST /mcp` | Always on | Canonical MCP discovery and JSON-RPC endpoints. |
+| `GET/POST /mcp/mcp`, `GET/POST /v1/mcp` | Always on | Explicit MCP aliases for clients that use variant MCP paths. |
+| `GET /dashboard`, `GET /api/calls`, `GET /api/calls/latest`, `GET /api/calls/{call_id}`, `GET /api/runtime` | Only when `MCP_DASHBOARD_ENABLED=true` | HTML/JSON diagnostic views over recent captured traffic and runtime metadata. |
+| `GET/POST /` and catch-all GET/POST fallback | Enabled by default (`MCP_COMPAT_PATHS_ENABLED=true`) | Compatibility routes for clients that rewrite or omit the `/mcp` path. |
 
 ### Available MCP tools
 
 | Tool | What it does |
 | --- | --- |
-| `get_caller_ip` | Returns the client IP address as seen by the server. Useful for testing proxies, ingress, and forwarding behavior. |
-| `add_numbers` | Adds two numbers and returns the sum. Simple sanity-check tool for MCP call flow. |
-| `utc_now` | Returns the current UTC timestamp from the running container. Useful for verifying liveness and time drift. |
 | `debug_request_context` | Returns a deep snapshot of the inbound HTTP request and MCP payload, including headers, auth values, query params, path, and raw body. This is one of the most sensitive tools in the toolbox. |
-| `inspect_request_summary` | Returns a focused summary of the request, caller, and forwarding chain. Good for quick ingress and proxy debugging. |
+| `inspect_request_auth` | Returns auth-related headers, cookies, query params, and decoded JWT content. Helpful for troubleshooting auth flows, but dangerous with real credentials. |
 | `inspect_request_headers` | Returns the headers exactly as the app received them. Useful when debugging auth, forwarding, or gateway behavior. |
 | `inspect_request_body` | Returns body size, text, base64, and parsed JSON when possible. Useful for seeing what actually reached the app. |
-| `inspect_request_auth` | Returns auth-related headers, cookies, query params, and decoded JWT content. Helpful for troubleshooting auth flows, but dangerous with real credentials. |
+| `inspect_request_summary` | Returns a focused summary of the request, caller, and forwarding chain. Good for quick ingress and proxy debugging. |
 | `inspect_mcp_envelope` | Returns the parsed MCP / JSON-RPC envelope for the current request. Useful for protocol troubleshooting. |
+| `inspect_recent_calls` | Returns the most recent captured calls plus telemetry. Useful for seeing what has hit the service recently. |
 | `inspect_runtime` | Returns runtime, process, version, uptime, and general server metadata. |
 | `inspect_routes` | Lists the FastAPI routes and methods the app currently exposes. |
 | `inspect_environment` | Returns environment variables, optionally filtered by prefix or specific names. Useful for validating deploy-time configuration. |
-| `inspect_recent_calls` | Returns the most recent captured calls plus telemetry. Useful for seeing what has hit the service recently. |
 | `get_server_info` | Returns server identity, protocol version, route count, uptime, and history settings. |
 | `echo_payload` | Echoes back arbitrary payload with timestamp and caller metadata. Useful for seeing exactly how payloads round-trip. |
-| `decode_jwt` | Decodes a JWT-like token and returns its header, payload, and signature segment. Helpful for non-secret token inspection. |
-| `dns_resolve` | Resolves a hostname from inside the container. Useful for checking DNS behavior in Docker or Azure. |
-| `tcp_probe` | Attempts a TCP connection and returns latency plus local/remote address details. Useful for low-level connectivity testing. |
 | `http_probe` | Issues an outbound HTTP request from inside the container and returns status, headers, and body preview. Useful for dependency and egress troubleshooting. |
 | `tls_probe` | Attempts a TLS handshake and returns certificate, cipher, and TLS version details. Useful for SSL/TLS debugging. |
+| `tcp_probe` | Attempts a TCP connection and returns latency plus local/remote address details. Useful for low-level connectivity testing. |
+| `dns_resolve` | Resolves a hostname from inside the container. Useful for checking DNS behavior in Docker or Azure. |
+| `decode_jwt` | Decodes a JWT-like token and returns its header, payload, and signature segment. Helpful for non-secret token inspection. |
+| `get_caller_ip` | Returns the client IP address as seen by the server. Useful for testing proxies, ingress, and forwarding behavior. |
+| `utc_now` | Returns the current UTC timestamp from the running container. Useful for verifying liveness and time drift. |
+| `add_numbers` | Adds two numbers and returns the sum. Simple sanity-check tool for MCP call flow. |
 
 ## Runtime configuration and feature flags
 
@@ -67,7 +66,10 @@ These are the runtime settings the application itself reads:
 | `HOST` | `0.0.0.0` | Bind address for the FastAPI server. | Usually leave this alone in containers. |
 | `PORT` | `8080` | Listening port for the server. | The Azure and Docker deployment definitions keep this aligned with ingress target port. |
 | `MCP_HISTORY_SIZE` | `10` | Number of recent calls kept in rolling in-memory history. | Higher values mean more request data retained in memory. |
-| `MCP_DASHBOARD_ENABLED` | `true` | Enables the dashboard and recent-call capture surfaces. | **Sensitive**: turning this on means recent requests, including auth material or tokens, may be visible through the dashboard/API history if real traffic hits the tool. |
+| `MCP_DASHBOARD_ENABLED` | `false` | Enables the dashboard and diagnostic HTTP surfaces under `/dashboard` and `/api/*`. | **Sensitive**: turning this on means recent requests, including auth material or tokens, may be visible through HTTP views if real traffic hits the tool. |
+| `MCP_COMPAT_PATHS_ENABLED` | `true` | Enables `/` and catch-all GET/POST compatibility routes. | Keep this on for Foundry and other clients that probe alternate paths before settling on `/mcp`. |
+
+The default posture is **MCP + health with compatibility routing enabled**: `/mcp` and `/healthz` stay on, dashboard/runtime HTTP views stay off unless explicitly enabled, and compatibility routing for `/` and alternate paths stays on for client interoperability.
 
 ### Local and quick-deploy environment variables
 
@@ -80,10 +82,16 @@ These are the runtime settings the application itself reads:
 | `HOST_PORT` | Docker Compose | Host port mapped to container port `8080`. |
 | `MCP_HISTORY_SIZE` | Local / Compose / ACA quick deploy | Rolling history size. |
 | `MCP_DASHBOARD_ENABLED` | Local / Compose / ACA quick deploy | Dashboard and recent-call capture flag. |
+| `MCP_COMPAT_PATHS_ENABLED` | Local / Compose / ACA quick deploy | Enables `/` and catch-all compatibility routes for non-standard clients. |
 | `APP_NAME` | `deploy_aca.sh` | Container App name for the Azure CLI quick deploy path. |
 | `RESOURCE_GROUP` | `deploy_aca.sh` | Resource group name for the Azure CLI quick deploy path. |
 | `LOCATION` | `deploy_aca.sh` | Azure region for the quick deploy path. |
-| `CONTAINERAPPS_ENVIRONMENT` | `deploy_aca.sh` | Container Apps environment name for the quick deploy path. |
+| `CONTAINERAPPS_ENVIRONMENT` | `deploy_aca.sh` / `deploy_bicep.sh` | Container Apps environment name for the quick deploy path. |
+| `LOG_ANALYTICS_WORKSPACE_NAME` | `deploy_bicep.sh` | Optional explicit Log Analytics workspace name for the Bicep quick deploy path. |
+| `USER_ASSIGNED_IDENTITY_NAME` | `deploy_bicep.sh` | Optional explicit pull identity name for the Bicep quick deploy path. |
+| `ACR_NAME` | `deploy_bicep.sh` | Optional explicit Azure Container Registry name. If blank, the script derives one from the app settings. |
+| `IMAGE_REPOSITORY` | `deploy_bicep.sh` | Container repository name to publish and deploy. |
+| `IMAGE_TAG` | `deploy_bicep.sh` | Container image tag to publish and deploy. |
 | `INGRESS` | `deploy_aca.sh` | Container App ingress mode, typically `external`. |
 
 ### Terraform knobs
@@ -157,8 +165,8 @@ python server.py
 Useful local URLs:
 
 - MCP discovery: `http://127.0.0.1:${PORT:-8080}/mcp`
-- Dashboard: `http://127.0.0.1:${PORT:-8080}/dashboard`
 - Health: `http://127.0.0.1:${PORT:-8080}/healthz`
+- Dashboard (only when `MCP_DASHBOARD_ENABLED=true`): `http://127.0.0.1:${PORT:-8080}/dashboard`
 
 If you are wiring this into an agent or MCP client locally, use:
 
@@ -179,6 +187,12 @@ Run this after the server is up:
 ```bash
 cd /path/to/MCP-Toolbox
 python3 scripts/smoke_test.py --base-url http://127.0.0.1:8080
+```
+
+The smoke test now expects the safer default (`/dashboard` disabled). If you explicitly enable the dashboard, run:
+
+```bash
+python3 scripts/smoke_test.py --base-url http://127.0.0.1:8080 --expect-dashboard-enabled
 ```
 
 ## Azure deployment options
@@ -301,6 +315,8 @@ After deployment, the MCP URL to give an agent or MCP client is:
    ```
 
 ### Option 3 - Bicep deployment
+
+If you want the lowest-friction Bicep path, use `./scripts/deploy_bicep.sh` as described in [README.md](./README.md). The rest of this section documents the manual Bicep flow and its individual steps.
 
 1. Edit `bicep/main.bicepparam`.
 
@@ -444,7 +460,7 @@ az containerapp create \
   --image "$IMAGE_REF" \
   --target-port 8080 \
   --ingress external \
-  --env-vars PORT=8080 MCP_HISTORY_SIZE=10 MCP_DASHBOARD_ENABLED=true
+  --env-vars PORT=8080 MCP_HISTORY_SIZE=10 MCP_DASHBOARD_ENABLED=false MCP_COMPAT_PATHS_ENABLED=true
 ```
 
 #### Existing ACR and existing ACA environment
@@ -505,7 +521,7 @@ az containerapp create \
   --user-assigned "$IDENTITY_ID" \
   --registry-server "${ACR_NAME}.azurecr.io" \
   --registry-identity "$IDENTITY_ID" \
-  --env-vars PORT=8080 MCP_HISTORY_SIZE=10 MCP_DASHBOARD_ENABLED=true
+  --env-vars PORT=8080 MCP_HISTORY_SIZE=10 MCP_DASHBOARD_ENABLED=false MCP_COMPAT_PATHS_ENABLED=true
 ```
 
 The MCP URL for an agent/client is:
@@ -529,6 +545,7 @@ Use the cleanup path that matches how you ran MCP Toolbox:
 ## Operational notes
 
 - The server keeps recent request history **in memory only**. Restarting the container clears it.
-- Dashboard/history visibility is controlled by `MCP_DASHBOARD_ENABLED`. If you disable it, the dashboard and recent-call surfaces stop being available.
-- When the dashboard/history capture is enabled, the app may retain real request metadata such as auth headers, cookies, query parameters, or body content in memory. Avoid sending production traffic or real secrets through it.
+- Dashboard HTTP visibility is controlled by `MCP_DASHBOARD_ENABLED`. It now defaults to `false`, so `/dashboard` and `/api/*` stay off unless you explicitly opt in.
+- Non-`/mcp` compatibility routing is controlled by `MCP_COMPAT_PATHS_ENABLED`. It now defaults to `true` so `/` and arbitrary-path fallbacks resolve MCP discovery/JSON-RPC for client interoperability.
+- Even with the dashboard disabled, the MCP inspection tools can still surface request metadata such as auth headers, cookies, query parameters, or body content. Avoid sending production traffic or real secrets through this service.
 - The app is cloud-agnostic; Azure-specific behavior lives in the deployment assets and `scripts/deploy_aca.sh`, not in the server code itself.
